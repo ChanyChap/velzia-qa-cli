@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "test": "node --test dist/tests/*.test.js",
     "dev:centinela": "tsx src/cli.ts centinela",
     "dev:sastre": "tsx src/cli.ts sastre"
