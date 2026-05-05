@@ -8,11 +8,15 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "tsc",
     "test": "node --test dist/tests/*.test.js",
     "dev:centinela": "tsx src/cli.ts centinela",
     "dev:sastre": "tsx src/cli.ts sastre"
   },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md"
+  ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "@browserbasehq/sdk": "^2.0.0",
