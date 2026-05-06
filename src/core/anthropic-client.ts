@@ -52,7 +52,7 @@ export class AnthropicClient {
     system,
     staticPrefix,
     dynamicSuffix,
-    maxTokens = 4096,
+    maxTokens = 16384,
     includeDefenseBlocks = true,
   }: {
     model: string;
@@ -91,11 +91,20 @@ export class AnthropicClient {
     return { text, usage: { input, output, cacheCreate, cacheRead }, costUsd };
   }
 
-  // Helper: parsea JSON del output del modelo, tolerante a fences markdown.
+  // Helper: parsea JSON del output del modelo, tolerante a fences markdown
+  // (bloques completos ```json ... ``` y también respuestas truncadas con solo cabecera).
   parseJson<T>(text: string): T {
     let s = text.trim();
     const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fence) s = fence[1].trim();
+    if (fence) {
+      s = fence[1].trim();
+    } else {
+      s = s.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    }
+    if (!s.startsWith("{") && !s.startsWith("[")) {
+      const firstBrace = s.search(/[{\[]/);
+      if (firstBrace > 0) s = s.slice(firstBrace);
+    }
     return JSON.parse(s) as T;
   }
 }

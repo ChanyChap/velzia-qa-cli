@@ -40,7 +40,7 @@ export class AnthropicClient {
      * - dynamicSuffix: prompt específico de la feature/finding actual
      * - model: "claude-sonnet-4-6" | "claude-haiku-4-5-20251001"
      */
-    async invoke({ model, system, staticPrefix, dynamicSuffix, maxTokens = 4096, includeDefenseBlocks = true, }) {
+    async invoke({ model, system, staticPrefix, dynamicSuffix, maxTokens = 16384, includeDefenseBlocks = true, }) {
         const messages = [{
                 role: "user",
                 content: [
@@ -67,12 +67,22 @@ export class AnthropicClient {
         const costUsd = computeCost(model, { input, output, cacheCreate, cacheRead });
         return { text, usage: { input, output, cacheCreate, cacheRead }, costUsd };
     }
-    // Helper: parsea JSON del output del modelo, tolerante a fences markdown.
+    // Helper: parsea JSON del output del modelo, tolerante a fences markdown
+    // (bloques completos ```json ... ``` y también respuestas truncadas con solo cabecera).
     parseJson(text) {
         let s = text.trim();
         const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (fence)
+        if (fence) {
             s = fence[1].trim();
+        }
+        else {
+            s = s.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+        }
+        if (!s.startsWith("{") && !s.startsWith("[")) {
+            const firstBrace = s.search(/[{\[]/);
+            if (firstBrace > 0)
+                s = s.slice(firstBrace);
+        }
         return JSON.parse(s);
     }
 }
