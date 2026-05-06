@@ -1,7 +1,7 @@
 // 6 jueces de lente humana — invocados por Centinela tras cada PASS funcional.
 // ux-heuristic, microcopy, legibility, mobile-first, a11y (axe), perf (Lighthouse).
 import { makeFindingId } from "../core/findings-api.js";
-function makeFinding(c, raw) {
+function makeFinding(c, raw, details) {
     return {
         id: makeFindingId(c.config.slug, raw.type, c.area, raw.summary),
         projectSlug: c.config.slug,
@@ -22,6 +22,21 @@ function makeFinding(c, raw) {
         state: "open",
         detectedByRuns: [c.runId],
         attempts: [],
+        details,
+    };
+}
+// Helper para enriquecer findings de perf/a11y con la feature en curso.
+function featureDetails(c) {
+    if (!c.feature)
+        return undefined;
+    return {
+        feature: {
+            id: c.feature.id,
+            name: c.feature.name,
+            url: c.feature.url,
+            source: c.feature.source,
+            criticality: c.feature.criticality,
+        },
     };
 }
 // 4.1 — UX heuristic (Sonnet)
@@ -99,13 +114,23 @@ export async function a11yJudge(c) {
     const sevMap = { critical: "critica", serious: "alta", moderate: "media", minor: "baja" };
     return (result.violations || []).map((v) => {
         const summary = `[a11y/${v.id}] ${v.help} (${v.count} nodos)`;
+        const details = {
+            ...featureDetails(c),
+            qaFlow: { available: false, stepsExecuted: [{ action: "axe-core scan", result: `${v.count} nodos violan la regla` }] },
+            evidence: { networkErrors: [], consoleErrors: [`axe-core[${v.id}]: ${v.help} (impact=${v.impact}, ${v.count} nodos)`] },
+            diagnosis: `axe-core encontró ${v.count} elemento(s) que violan la regla "${v.id}" (${v.help}). ` +
+                `Impacto declarado por axe: ${v.impact}.`,
+            risks: v.impact === "critical" || v.impact === "serious"
+                ? [`Usuarios con lectores de pantalla no podrán usar ${c.feature?.name || c.area}.`, "Riesgo legal de accesibilidad si la app debe cumplir WCAG AA."]
+                : [`Degrada la experiencia para usuarios de tecnología asistiva en ${c.feature?.name || c.area}.`],
+        };
         return makeFinding(c, {
             type: "a11y",
             severity: sevMap[v.impact] || "baja",
             summary,
             rootCause: `axe-core regla "${v.id}" detecta ${v.count} violaciones`,
             recommendation: `Doc: ${v.helpUrl}`,
-        });
+        }, details);
     });
 }
 // 4.4 — Perf (determinista) con Lighthouse-CI.
@@ -128,13 +153,37 @@ export async function perfJudge(c) {
     }).catch(() => ({ lcp: 0, fcp: 0, domLoaded: 0 }));
     const findings = [];
     if (metrics.lcp > budgets.lcp_ms) {
+        const details = {
+            ...featureDetails(c),
+            qaFlow: {
+                available: false,
+                stepsExecuted: [{ action: "performance.timing", result: `LCP=${Math.round(metrics.lcp)}ms · FCP=${Math.round(metrics.fcp)}ms · DOMLoaded=${Math.round(metrics.domLoaded)}ms` }],
+            },
+            evidence: {
+                networkErrors: [],
+                consoleErrors: [
+                    `LCP=${Math.round(metrics.lcp)}ms (budget=${budgets.lcp_ms}ms)`,
+                    `FCP=${Math.round(metrics.fcp)}ms`,
+                    `DOMContentLoaded=${Math.round(metrics.domLoaded)}ms`,
+                ],
+            },
+            diagnosis: `${c.feature?.name || c.area} tarda ${Math.round(metrics.lcp)}ms en pintar el contenido principal (LCP), ` +
+                `cuando el budget para esta app es ${budgets.lcp_ms}ms. ` +
+                `Esto indica recursos críticos en el head (CSS/fonts), JS bloqueante, o imágenes pesadas en above-the-fold.`,
+            risks: [
+                `Usuarios en 3G/4G perciben la pantalla como "no carga".`,
+                metrics.lcp > budgets.lcp_ms * 2
+                    ? "Severo: degrada Core Web Vitals y puede afectar SEO."
+                    : "Moderado: cae fuera del rango \"good\" de Core Web Vitals.",
+            ],
+        };
         findings.push(makeFinding(c, {
             type: "perf",
             severity: metrics.lcp > budgets.lcp_ms * 1.5 ? "alta" : "media",
             summary: `LCP de ${Math.round(metrics.lcp)}ms supera el budget ${budgets.lcp_ms}ms`,
             rootCause: "Carga inicial del documento + recursos críticos demasiado lenta",
             recommendation: "Revisar recursos críticos (CSS/fonts en <head>), images sin lazy, scripts bloqueantes",
-        }));
+        }, details));
     }
     return findings;
 }

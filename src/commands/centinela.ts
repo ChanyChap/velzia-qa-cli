@@ -8,8 +8,10 @@ import { FindingsApi, makeFindingId } from "../core/findings-api.js";
 import { plan, type CoverPlan } from "../agents/planner.js";
 import { execute } from "../agents/flow-executor.js";
 import { uxHeuristicJudge, microcopyJudge, legibilityJudge, mobileFirstJudge, a11yJudge, perfJudge } from "../agents/judges.js";
+import { classifyAll, diagnose } from "../core/diagnostician.js";
 import { loadEnv } from "../types/config.js";
 import type { QaConfig } from "../types/config.js";
+import type { FindingDetails } from "../types/finding.js";
 
 interface CentinelaArgs {
   cwd: string;
@@ -65,11 +67,53 @@ export async function runCentinela(args: CentinelaArgs): Promise<void> {
         else if (r.verdict === "FAIL") failCount++;
         else blockedCount++;
 
-        // Si FAIL o errores network → emitir finding type=bug.
+        // Si FAIL o errores network → emitir finding type=bug enriquecido.
         if (r.verdict === "FAIL" || r.networkErrors.length > 0 || r.consoleErrors.length > 0) {
           const summary = r.verdict === "FAIL"
-            ? r.failNote || `Feature ${feature.id} falló`
-            : `Errores de red/consola en ${feature.url || feature.name}`;
+            ? r.failNote || `Feature "${feature.name}" falló`
+            : `Errores en "${feature.name}"`;
+
+          // 1. Clasificar cada error de red por capa (Supabase / backend / third-party).
+          const networkErrorsClassified = classifyAll(r.networkErrors, config.urls.prod);
+
+          // 2. Diagnóstico humano: reglas heurísticas primero, fallback Haiku si no matchea.
+          const diag = await diagnose(
+            {
+              featureName: feature.name,
+              featureUrl: feature.url,
+              finalUrl: r.finalUrl,
+              failNote: r.failNote,
+              blockReason: r.blockReason,
+              networkErrors: networkErrorsClassified,
+              consoleErrors: r.consoleErrors,
+            },
+            anthropic,
+          );
+
+          const details: FindingDetails = {
+            feature: {
+              id: feature.id,
+              name: feature.name,
+              url: feature.url,
+              source: feature.source,
+              criticality: feature.criticality,
+            },
+            qaFlow: {
+              available: feature.qaFlowAvailable,
+              stepsExecuted: r.stepsExecuted,
+            },
+            evidence: {
+              networkErrors: networkErrorsClassified,
+              consoleErrors: r.consoleErrors,
+              failNote: r.failNote,
+              blockReason: r.blockReason,
+              finalUrl: r.finalUrl,
+              durationMs: r.durationMs,
+            },
+            risks: diag.risks,
+            diagnosis: diag.diagnosis,
+          };
+
           await findingsApi.upsert({
             id: makeFindingId(config.slug, "bug", feature.url || feature.name, summary),
             projectSlug: config.slug,
@@ -77,11 +121,12 @@ export async function runCentinela(args: CentinelaArgs): Promise<void> {
             severity: r.verdict === "FAIL" ? "alta" : "media",
             area: feature.url || feature.name,
             summary,
-            rootCause: [
-              ...(r.networkErrors.slice(0, 3).map((e) => `${e.endpoint} → ${e.status}`)),
-              ...(r.consoleErrors.slice(0, 3)),
-            ].join(" · "),
-            recommendation: "Revisar el endpoint o consola para identificar causa raíz.",
+            rootCause: networkErrorsClassified
+              .slice(0, 5)
+              .map((e) => `[${e.layer}] ${e.endpoint} → ${e.status}`)
+              .concat(r.consoleErrors.slice(0, 3))
+              .join(" · "),
+            recommendation: diag.recommendation,
             applyEnabled: false,
             fixes: [],
             fixesAlternatives: [],
@@ -89,13 +134,14 @@ export async function runCentinela(args: CentinelaArgs): Promise<void> {
             state: "open",
             detectedByRuns: [runId],
             attempts: [],
+            details,
           });
           findingsNew++;
         }
 
         // Si PASS → ejecutar los 6 jueces.
         if (r.verdict === "PASS") {
-          const ctx = { client: anthropic, browser, config, area: feature.url || feature.name, runId };
+          const ctx = { client: anthropic, browser, config, area: feature.url || feature.name, runId, feature };
           const judgeResults = await Promise.allSettled([
             uxHeuristicJudge(ctx),
             microcopyJudge(ctx),
