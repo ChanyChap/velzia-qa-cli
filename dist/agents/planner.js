@@ -50,7 +50,7 @@ Respuesta solo JSON, sin texto explicativo.`;
         model: "claude-sonnet-4-6",
         staticPrefix,
         dynamicSuffix,
-        maxTokens: 4096,
+        maxTokens: 16384,
         includeDefenseBlocks: true,
     });
     return opts.client.parseJson(r.text);
