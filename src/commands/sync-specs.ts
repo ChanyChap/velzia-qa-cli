@@ -90,10 +90,19 @@ function parseRegistry(slug: string, content: string): ParsedEntry[] {
     const idShort = heading.split(/\s+/)[0];
 
     // Extraer petición y URLs.
+    // Capturamos la petición hasta el siguiente campo `- **xxx:**` o el final
+    // de la sección. Soporta peticiones multilínea y con comillas internas.
     let petition = "";
     let urlAffected: string | null = null;
-    const petMatch = sec.match(/\*\*petici[oó]n:\*\*\s*"?([^\n"]+)"?/i);
-    if (petMatch) petition = petMatch[1].trim();
+    const petMatch = sec.match(/\*\*petici[oó]n:\*\*\s*([\s\S]*?)(?=\n-\s+\*\*|\n##\s|$)/i);
+    if (petMatch) {
+      petition = petMatch[1]
+        .trim()
+        .replace(/^"|"$/g, "")
+        .replace(/\\"/g, '"')
+        .replace(/\s+\n/g, "\n")
+        .trim();
+    }
     const urlMatch = sec.match(/\*\*URLs?\/vistas? afectadas?:\*\*[\s\S]*?-\s+`?([^\n`]+)/i)
       || sec.match(/`(\/[^`]+)`/);
     if (urlMatch) urlAffected = urlMatch[1].trim().split(" ")[0];
@@ -114,11 +123,16 @@ function parseRegistry(slug: string, content: string): ParsedEntry[] {
     const stateText = stateMatch ? stateMatch[1].toLowerCase() : "pendiente";
     const priority = stateText.includes("pendiente") ? 10 : 50;
 
+    // name corto (primera oración o ≤100 chars) para titular la card; la
+    // description guarda la petición completa hasta 4000 chars para que la
+    // página /specs la muestre entera.
+    const firstSentence = petition.split(/(?<=\.)\s+/)[0] || petition;
+    const shortName = (firstSentence.length <= 100 ? firstSentence : firstSentence.slice(0, 97) + "…").trim();
     out.push({
       id: `${slug}-registry-${slugify(idShort)}`,
       source: "registry",
-      name: petition.slice(0, 80) || idShort,
-      description: petition || "(sin descripción)",
+      name: shortName || idShort,
+      description: petition.slice(0, 4000) || "(sin descripción)",
       url: urlAffected,
       qaFlow,
       priority,

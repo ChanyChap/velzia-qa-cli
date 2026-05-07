@@ -68,9 +68,19 @@ function parseRegistry(slug, content) {
     if (!/^\d{8,}/.test(heading)) continue;
     const idShort = heading.split(/\s+/)[0];
 
+    // Capturamos la petición hasta el siguiente campo `- **xxx:**` o el final
+    // de la sección. Antes paraba al ver la primera comilla, lo que truncaba
+    // peticiones con citas dentro (ej: `card \"Empresa\"...`).
     let petition = "";
-    const petMatch = sec.match(/\*\*petici[oó]n:\*\*\s*"?([^\n"]*)"?/i);
-    if (petMatch) petition = petMatch[1].trim();
+    const petMatch = sec.match(/\*\*petici[oó]n:\*\*\s*([\s\S]*?)(?=\n-\s+\*\*|\n##\s|$)/i);
+    if (petMatch) {
+      petition = petMatch[1]
+        .trim()
+        .replace(/^"|"$/g, "")          // comillas externas que envuelven la cita
+        .replace(/\\"/g, '"')            // \" → " (desescape)
+        .replace(/\s+\n/g, "\n")         // limpia espacios al final de líneas
+        .trim();
+    }
 
     let urlAffected = null;
     const urlBlock = sec.match(/\*\*URLs?\/vistas? afectadas?:\*\*([\s\S]*?)(\n-\s+\*\*|\n\n|$)/i);
@@ -86,11 +96,16 @@ function parseRegistry(slug, content) {
     const stateText = stateMatch ? stateMatch[1].toLowerCase() : "pendiente";
     const priority = stateText.includes("pendiente") ? 10 : 50;
 
+    // El name debe ser corto para titular la card. Cogemos la primera oración o
+    // los primeros 100 chars hasta el primer punto. La description guarda la
+    // petición íntegra (hasta 4000 chars) para que se lea completa en la UI.
+    const firstSentence = petition.split(/(?<=\.)\s+/)[0] || petition;
+    const shortName = (firstSentence.length <= 100 ? firstSentence : firstSentence.slice(0, 97) + "…").trim();
     out.push({
       id: `${slug}-registry-${slugify(idShort)}`,
       source: "registry",
-      name: petition.slice(0, 80) || idShort,
-      description: petition.slice(0, 1000) || `Entrada del registry: ${idShort}`,
+      name: shortName || idShort,
+      description: petition.slice(0, 4000) || `Entrada del registry: ${idShort}`,
       url: urlAffected,
       qaFlow,
       priority,
