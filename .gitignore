@@ -3,3 +3,15 @@ node_modules/
 .env
 .env.local
 .DS_Store
+
+# Testing artifacts (Playwright)
+.playwright-mcp/
+*.png
+
+# Sesiones Claude Code locales
+.claude/active-sessions/
+.claude/local/
+
+# Cache wrangler / SQL temporal
+.wrangler/
+_backfill_details.sql
