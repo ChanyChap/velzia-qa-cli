@@ -50,7 +50,9 @@ export class SpecsApi {
         const newState = verdict === "PASS" ? "passing"
             : verdict === "FAIL" ? "failing"
                 : "blocked";
-        // Tras 3 PASS consecutivos, baja la prioridad (de 0/10 a 50) para liberar slots top.
+        // NO bajamos la prioridad tras X PASS — al contrario, las passing se siguen
+        // probando en LRU para detectar regresiones (que algo que pasaba ayer rompa
+        // hoy por un cambio nuevo). El control de regresión está en el planner, no aquí.
         const patch = {
             lastRunId: runId,
             lastVerdict: verdict,
@@ -58,8 +60,6 @@ export class SpecsApi {
             passStreak: newStreak,
             state: newState,
         };
-        if (newStreak >= 3)
-            patch.priority = 50;
         await this.patch(id, patch);
     }
 }

@@ -3,6 +3,7 @@
 
 import { runCentinela } from "./commands/centinela.js";
 import { runSastre } from "./commands/sastre.js";
+import { runSyncSpecs } from "./commands/sync-specs.js";
 
 function parseArgs(argv: string[]): { command: string; flags: Record<string, string | boolean> } {
   const [command, ...rest] = argv;
@@ -33,6 +34,10 @@ async function main() {
     }
     case "sastre": {
       await runSastre({ cwd, dryRun: !!flags["dry-run"] });
+      break;
+    }
+    case "sync-specs": {
+      await runSyncSpecs({ cwd, dryRun: !!flags["dry-run"] });
       break;
     }
     case "version":

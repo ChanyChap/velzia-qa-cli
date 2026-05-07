@@ -6,12 +6,18 @@
  */
 export async function planPendingPriority(opts) {
     const max = opts.maxFeatures || 50;
-    const [pending, failing] = await Promise.all([
-        opts.specsApi.list({ project: opts.config.slug, state: "pending" }),
+    const [failing, pending, passing] = await Promise.all([
         opts.specsApi.list({ project: opts.config.slug, state: "failing" }),
+        opts.specsApi.list({ project: opts.config.slug, state: "pending" }),
+        opts.specsApi.list({ project: opts.config.slug, state: "passing" }),
     ]);
-    // Failing primero (algo se rompió, urgente). Pending después.
-    const all = [...failing, ...pending].slice(0, max);
+    // Orden de cover:
+    //  1. failing  → algo se rompió, urgentísimo de re-verificar y arreglar.
+    //  2. pending  → nunca se ha probado, debe pasar al menos 1 vez.
+    //  3. passing en LRU → regresión: que un cambio nuevo no haya roto algo viejo.
+    //     El menos recientemente probado primero, para que en pocos ticks rotemos toda la matriz.
+    const passingLru = [...passing].sort((a, b) => (a.lastRunAt || "").localeCompare(b.lastRunAt || ""));
+    const all = [...failing, ...pending, ...passingLru].slice(0, max);
     const features = all.map((s) => ({
         id: s.id,
         name: s.name,
@@ -31,7 +37,7 @@ export async function planPendingPriority(opts) {
                 name: "pending-priority",
                 parallel: 1,
                 features,
-                rationale: `${failing.length} failing + ${pending.length} pending leídas de D1.`,
+                rationale: `${failing.length} failing + ${pending.length} pending + ${Math.max(0, max - failing.length - pending.length)} passing (LRU para detectar regresiones).`,
             }],
         skipped: [],
     };

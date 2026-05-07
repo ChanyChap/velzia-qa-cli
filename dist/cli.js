@@ -2,6 +2,7 @@
 // CLI bin entry point — dispatches to centinela or sastre.
 import { runCentinela } from "./commands/centinela.js";
 import { runSastre } from "./commands/sastre.js";
+import { runSyncSpecs } from "./commands/sync-specs.js";
 function parseArgs(argv) {
     const [command, ...rest] = argv;
     const flags = {};
@@ -33,6 +34,10 @@ async function main() {
         }
         case "sastre": {
             await runSastre({ cwd, dryRun: !!flags["dry-run"] });
+            break;
+        }
+        case "sync-specs": {
+            await runSyncSpecs({ cwd, dryRun: !!flags["dry-run"] });
             break;
         }
         case "version":
