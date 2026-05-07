@@ -1,4 +1,41 @@
 // qa-planner (Sonnet 4.6) — resuelve el cover del run.
+/**
+ * Modo "pending-priority": NO usa LLM. Lee directamente las specs pending o
+ * failing de la tabla specs en D1, ordenadas por priority. Las pone TODAS en
+ * un solo batch. Pensado para el agente 24/7 que hace ticks cortos.
+ */
+export async function planPendingPriority(opts) {
+    const max = opts.maxFeatures || 50;
+    const [pending, failing] = await Promise.all([
+        opts.specsApi.list({ project: opts.config.slug, state: "pending" }),
+        opts.specsApi.list({ project: opts.config.slug, state: "failing" }),
+    ]);
+    // Failing primero (algo se rompió, urgente). Pending después.
+    const all = [...failing, ...pending].slice(0, max);
+    const features = all.map((s) => ({
+        id: s.id,
+        name: s.name,
+        source: s.source === "matrix" ? "matrix" : s.source === "registry" ? "registry" : "manual",
+        qaFlowAvailable: !!(s.qaFlow && s.qaFlow.steps?.length),
+        criticality: s.priority < 20 ? "alta" : s.priority < 60 ? "media" : "baja",
+        estimatedSec: 30,
+        url: s.url,
+        specId: s.id,
+        passStreak: s.passStreak,
+    }));
+    return {
+        project: opts.config.slug,
+        totalFeatures: features.length,
+        estimatedDurationMin: Math.ceil((features.length * 30) / 60),
+        batches: features.length === 0 ? [] : [{
+                name: "pending-priority",
+                parallel: 1,
+                features,
+                rationale: `${failing.length} failing + ${pending.length} pending leídas de D1.`,
+            }],
+        skipped: [],
+    };
+}
 export async function plan(opts) {
     const staticPrefix = [
         `# Project config: ${opts.config.appName} (${opts.config.slug})`,

@@ -47,7 +47,7 @@ export interface FindingDetails {
     id: string;
     name: string;
     url?: string;
-    source: "matrix" | "registry" | "domain-bootstrap";
+    source: "matrix" | "registry" | "domain-bootstrap" | "manual";
     criticality?: Severity;
   };
   // Pasos que ejecutó el flow-executor (hoy básicos: navigate + wait).

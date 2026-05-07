@@ -2,15 +2,20 @@
 
 import type { AnthropicClient } from "../core/anthropic-client.js";
 import type { QaConfig } from "../types/config.js";
+import type { SpecsApi } from "../core/specs-api.js";
 
 export interface PlanFeature {
   id: string;
   name: string;
-  source: "matrix" | "registry" | "domain-bootstrap";
+  source: "matrix" | "registry" | "domain-bootstrap" | "manual";
   qaFlowAvailable: boolean;
   criticality: "critica" | "alta" | "media" | "baja";
   estimatedSec: number;
   url?: string;
+  // Si la feature viene de la tabla specs (manual o re-import), guardamos el id
+  // para que centinela pueda reportar verdict via SpecsApi.patch al terminar.
+  specId?: string;
+  passStreak?: number;
 }
 
 export interface PlanBatch {
@@ -26,6 +31,48 @@ export interface CoverPlan {
   estimatedDurationMin: number;
   batches: PlanBatch[];
   skipped: Array<{ id: string; reason: string }>;
+}
+
+/**
+ * Modo "pending-priority": NO usa LLM. Lee directamente las specs pending o
+ * failing de la tabla specs en D1, ordenadas por priority. Las pone TODAS en
+ * un solo batch. Pensado para el agente 24/7 que hace ticks cortos.
+ */
+export async function planPendingPriority(opts: {
+  config: QaConfig;
+  specsApi: SpecsApi;
+  maxFeatures?: number;
+}): Promise<CoverPlan> {
+  const max = opts.maxFeatures || 50;
+  const [pending, failing] = await Promise.all([
+    opts.specsApi.list({ project: opts.config.slug, state: "pending" }),
+    opts.specsApi.list({ project: opts.config.slug, state: "failing" }),
+  ]);
+  // Failing primero (algo se rompió, urgente). Pending después.
+  const all = [...failing, ...pending].slice(0, max);
+  const features: PlanFeature[] = all.map((s) => ({
+    id: s.id,
+    name: s.name,
+    source: s.source === "matrix" ? "matrix" : s.source === "registry" ? "registry" : "manual",
+    qaFlowAvailable: !!(s.qaFlow && s.qaFlow.steps?.length),
+    criticality: s.priority < 20 ? "alta" : s.priority < 60 ? "media" : "baja",
+    estimatedSec: 30,
+    url: s.url,
+    specId: s.id,
+    passStreak: s.passStreak,
+  }));
+  return {
+    project: opts.config.slug,
+    totalFeatures: features.length,
+    estimatedDurationMin: Math.ceil((features.length * 30) / 60),
+    batches: features.length === 0 ? [] : [{
+      name: "pending-priority",
+      parallel: 1,
+      features,
+      rationale: `${failing.length} failing + ${pending.length} pending leídas de D1.`,
+    }],
+    skipped: [],
+  };
 }
 
 export async function plan(opts: {

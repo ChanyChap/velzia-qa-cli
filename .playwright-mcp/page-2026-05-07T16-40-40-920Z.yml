@@ -1,0 +1,52 @@
+- generic [active] [ref=e1]:
+  - heading "QA · Specs" [level=1] [ref=e2]
+  - generic [ref=e3]:
+    - generic [ref=e4]: "Proyecto:"
+    - combobox [ref=e5]:
+      - option "rt.sig" [selected]
+      - option "velziaonsite"
+      - option "velziacad"
+      - option "factorias"
+    - generic [ref=e6]: "Estado:"
+    - combobox [ref=e7]:
+      - option "todos" [selected]
+      - option "pending"
+      - option "failing"
+      - option "passing"
+      - option "blocked"
+      - option "needs-translation"
+    - button "+ Nueva petición" [ref=e8] [cursor=pointer]
+    - link "Decisiones →" [ref=e9] [cursor=pointer]:
+      - /url: /decisiones
+  - generic [ref=e10]:
+    - heading "pending (1)" [level=2] [ref=e11]
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]: Borrar cliente con confirmaci�n
+          - generic [ref=e16]: /clientes
+        - generic [ref=e17]:
+          - generic [ref=e18]: manual
+          - generic [ref=e19]: pending
+      - generic [ref=e20]: Probar que al borrar un cliente sale un modal
+      - generic [ref=e21]: Aún no probada.
+      - group [ref=e22]:
+        - generic "Ver qa_flow (1 pasos)" [ref=e23] [cursor=pointer]
+      - generic [ref=e24]:
+        - button "⬆ Top" [ref=e25] [cursor=pointer]
+        - button "⏸" [ref=e26] [cursor=pointer]
+        - button "🗑" [ref=e27] [cursor=pointer]
+  - generic [ref=e29]:
+    - heading "Nueva petición de prueba" [level=3] [ref=e30]
+    - generic [ref=e31]: Proyecto
+    - combobox [ref=e32]:
+      - option "rt.sig" [selected]
+      - option "velziaonsite"
+      - option "velziacad"
+      - option "factorias"
+    - generic [ref=e33]: ¿Qué quieres probar? (lenguaje natural)
+    - 'textbox "Ej: Probar que al borrar un cliente sale un modal de confirmación con un botón rojo ''Borrar''. Si confirmo, el cliente desaparece de la lista." [ref=e34]': Probar que en la página de nuevo presupuesto, al escribir un descuento mayor del 50% aparece un aviso amarillo "Descuento alto, requiere aprobación" antes de poder guardar.
+    - generic [ref=e38]: Generando qa_flow con Sonnet…
+    - generic [ref=e35]:
+      - button "Cancelar" [ref=e36] [cursor=pointer]
+      - button "Generar qa_flow →" [disabled] [ref=e37] [cursor=pointer]

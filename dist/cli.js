@@ -27,7 +27,8 @@ async function main() {
         case "centinela": {
             const mode = flags.mode || (flags.smoke ? "smoke" : flags.diff ? "diff-cover" : "full");
             const diffFiles = flags["diff-files"] ? String(flags["diff-files"]).split(",") : undefined;
-            await runCentinela({ cwd, mode, diffFiles });
+            const maxFeatures = flags["max-features"] ? parseInt(String(flags["max-features"]), 10) : undefined;
+            await runCentinela({ cwd, mode, diffFiles, maxFeatures });
             break;
         }
         case "sastre": {
@@ -37,11 +38,11 @@ async function main() {
         case "version":
         case "--version":
         case "-v":
-            console.log("@velzia/qa-cli 0.1.0");
+            console.log("@chanychap/qa-cli 0.2.0");
             break;
         default:
             console.error(`Uso:
-  qa-cli centinela [--mode full|smoke|diff-cover] [--cwd <path>] [--diff-files a.ts,b.ts]
+  qa-cli centinela [--mode full|smoke|diff-cover|pending-priority] [--cwd <path>] [--diff-files a.ts,b.ts] [--max-features 50]
   qa-cli sastre [--dry-run] [--cwd <path>]
   qa-cli version`);
             process.exit(command ? 1 : 0);

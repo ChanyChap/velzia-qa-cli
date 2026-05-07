@@ -4,7 +4,8 @@ import path from "node:path";
 import { AnthropicClient } from "../core/anthropic-client.js";
 import { BrowserbaseClient } from "../core/browserbase-client.js";
 import { FindingsApi, makeFindingId } from "../core/findings-api.js";
-import { plan } from "../agents/planner.js";
+import { SpecsApi } from "../core/specs-api.js";
+import { plan, planPendingPriority } from "../agents/planner.js";
 import { execute } from "../agents/flow-executor.js";
 import { uxHeuristicJudge, microcopyJudge, legibilityJudge, mobileFirstJudge, a11yJudge, perfJudge } from "../agents/judges.js";
 import { classifyAll, diagnose } from "../core/diagnostician.js";
@@ -29,15 +30,18 @@ export async function runCentinela(args) {
     const domainContent = readSafe(path.join(cwd, ".claude", "domain-assumptions.md"));
     const anthropic = new AnthropicClient(env);
     const findingsApi = new FindingsApi(env);
+    const specsApi = new SpecsApi(env);
     const runId = env.RUN_ID || `centinela-${Date.now()}`;
     let totalCostUsd = 0;
     let passCount = 0, failCount = 0, blockedCount = 0, findingsNew = 0;
     console.log(`[centinela] start runId=${runId} project=${config.slug} mode=${args.mode}`);
-    // 1. Plan.
-    const cover = await plan({
-        client: anthropic, config, matrixContent, registryContent, domainContent,
-        mode: args.mode, diffFiles: args.diffFiles,
-    });
+    // 1. Plan: pending-priority lee D1 directo (sin LLM); el resto usa Sonnet.
+    const cover = args.mode === "pending-priority"
+        ? await planPendingPriority({ config, specsApi, maxFeatures: args.maxFeatures })
+        : await plan({
+            client: anthropic, config, matrixContent, registryContent, domainContent,
+            mode: args.mode, diffFiles: args.diffFiles,
+        });
     console.log(`[centinela] cover: ${cover.totalFeatures} features en ${cover.batches.length} batches`);
     // 2. Browser session.
     const browser = new BrowserbaseClient(env);
@@ -58,6 +62,11 @@ export async function runCentinela(args) {
                     failCount++;
                 else
                     blockedCount++;
+                // Si la feature viene de la tabla specs, reportar verdict para que la
+                // página /specs muestre el último estado y recalcule pass_streak.
+                if (feature.specId) {
+                    await specsApi.reportVerdict(feature.specId, r.verdict, runId, feature.passStreak || 0).catch((e) => console.warn(`[centinela] specs.reportVerdict ${feature.specId}: ${e.message}`));
+                }
                 // Si FAIL o errores network → emitir finding type=bug enriquecido.
                 if (r.verdict === "FAIL" || r.networkErrors.length > 0 || r.consoleErrors.length > 0) {
                     const summary = r.verdict === "FAIL"

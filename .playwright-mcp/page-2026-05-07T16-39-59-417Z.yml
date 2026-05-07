@@ -1,0 +1,21 @@
+- generic [active] [ref=e1]:
+  - heading "QA · Specs" [level=1] [ref=e2]
+  - generic [ref=e3]:
+    - generic [ref=e4]: "Proyecto:"
+    - combobox [ref=e5]:
+      - option "rt.sig" [selected]
+      - option "velziaonsite"
+      - option "velziacad"
+      - option "factorias"
+    - generic [ref=e6]: "Estado:"
+    - combobox [ref=e7]:
+      - option "todos" [selected]
+      - option "pending"
+      - option "failing"
+      - option "passing"
+      - option "blocked"
+      - option "needs-translation"
+    - button "+ Nueva petición" [ref=e8] [cursor=pointer]
+    - link "Decisiones →" [ref=e9] [cursor=pointer]:
+      - /url: /decisiones
+  - generic [ref=e10]: Cargando…
