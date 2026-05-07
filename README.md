@@ -1,6 +1,24 @@
-# @velzia/qa-cli
+# @chanychap/qa-cli
 
 CLI ejecutado por GitHub Actions cron para Centinela + Sastre. Sin invocación manual de Chany.
+
+## Instalación
+
+Publicado en GitHub Packages. Para que `npm install -g` lo encuentre, los runners
+de GitHub Actions necesitan apuntar al registry y autenticarse:
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: "20"
+    registry-url: "https://npm.pkg.github.com"
+    scope: "@chanychap"
+- run: npm install -g @chanychap/qa-cli@latest
+  env:
+    NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+(En el repo del consumidor — no en este. El `GITHUB_TOKEN` automático del workflow es suficiente porque el paquete vive bajo el mismo owner `ChanyChap`.)
 
 ## Comandos
 
