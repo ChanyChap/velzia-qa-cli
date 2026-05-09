@@ -47,21 +47,74 @@ export class BrowserbaseClient {
         await this.stagehand.init();
         return this.stagehand;
     }
+    /**
+     * Login best-effort. Si los selectores no matchean (proyectos con auth custom)
+     * o el submit no redirige en 15s, NO lanza: deja la sesión sin auth y las
+     * features que requieran auth se marcarán BLOCKED por el flow-executor cuando
+     * vean /login en la URL final.
+     */
     async login(config) {
         if (!this.stagehand)
             throw new Error("startSession() primero");
         if (!config.loginPath)
             return;
         const page = this.stagehand.page;
-        await page.goto(`${config.urls.prod}${config.loginPath}`, { waitUntil: "domcontentloaded" });
-        await page.fill('input[type="email"], input[name="email"]', this.env.QA_USER_EMAIL);
-        await page.fill('input[type="password"], input[name="password"]', this.env.QA_USER_PASSWORD);
-        await Promise.all([
-            page.waitForURL((u) => !u.toString().includes(config.loginPath), { timeout: 30000 }),
-            page.click('button[type="submit"]'),
-        ]);
-        if (config.readinessSelector) {
-            await page.waitForSelector(config.readinessSelector, { timeout: 15000 });
+        try {
+            await page.goto(`${config.urls.prod}${config.loginPath}`, { waitUntil: "domcontentloaded", timeout: 15000 });
+            // Probamos varios selectores comunes para email/password antes de rendirnos.
+            const emailSelectors = [
+                'input[type="email"]',
+                'input[name="email"]',
+                '[data-testid="email"]',
+                '[data-testid="login-email"]',
+                '#email',
+                'input[autocomplete="email"]',
+            ];
+            const passwordSelectors = [
+                'input[type="password"]',
+                'input[name="password"]',
+                '[data-testid="password"]',
+                '[data-testid="login-password"]',
+                '#password',
+                'input[autocomplete="current-password"]',
+            ];
+            let emailFilled = false;
+            for (const sel of emailSelectors) {
+                try {
+                    await page.fill(sel, this.env.QA_USER_EMAIL, { timeout: 2000 });
+                    emailFilled = true;
+                    break;
+                }
+                catch { /* siguiente selector */ }
+            }
+            if (!emailFilled) {
+                console.warn(`[login] no encontré input de email en ${config.loginPath}, sigo sin auth`);
+                return;
+            }
+            let passwordFilled = false;
+            for (const sel of passwordSelectors) {
+                try {
+                    await page.fill(sel, this.env.QA_USER_PASSWORD, { timeout: 2000 });
+                    passwordFilled = true;
+                    break;
+                }
+                catch { /* siguiente */ }
+            }
+            if (!passwordFilled) {
+                console.warn(`[login] input de password no encontrado, sigo sin auth`);
+                return;
+            }
+            // Submit + esperar a salir de /login (solo 15s, no 30 — si tarda más, asumimos fallo).
+            await Promise.all([
+                page.waitForURL((u) => !u.toString().includes(config.loginPath), { timeout: 15000 }).catch(() => { }),
+                page.click('button[type="submit"]').catch(() => { }),
+            ]);
+            if (config.readinessSelector) {
+                await page.waitForSelector(config.readinessSelector, { timeout: 8000 }).catch(() => { });
+            }
+        }
+        catch (e) {
+            console.warn(`[login] best-effort falló (${e.message?.slice(0, 100)}), continúo sin auth`);
         }
     }
     async screenshot() {

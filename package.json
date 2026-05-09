@@ -1,6 +1,6 @@
 {
   "name": "@chanychap/qa-cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Centinela + Sastre — testing autónomo en la nube para apps Velzia",
   "type": "module",
   "bin": {
