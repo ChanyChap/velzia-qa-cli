@@ -1,28 +1,49 @@
-// Wrapper Browserbase + Stagehand para sesión de navegador en la nube.
+// Wrapper Browserbase + Stagehand. Soporta dos modos:
+//  - engine.type === "browserbase"     → sesión remota en la nube (cuesta minutos).
+//  - engine.type === "stagehand-local" → Playwright local en el runner (gratis en GH Actions).
 // Usado por flow-executor + jueces (a11y, mobile-first).
 import { Browserbase } from "@browserbasehq/sdk";
 import { Stagehand } from "@browserbasehq/stagehand";
 export class BrowserbaseClient {
     env;
-    bb;
+    bb = null;
     stagehand = null;
     constructor(env) {
         this.env = env;
-        this.bb = new Browserbase({ apiKey: env.BROWSERBASE_API_KEY });
+        if (env.BROWSERBASE_API_KEY) {
+            this.bb = new Browserbase({ apiKey: env.BROWSERBASE_API_KEY });
+        }
     }
     async startSession(config) {
-        const sess = await this.bb.sessions.create({
-            projectId: this.env.BROWSERBASE_PROJECT_ID,
-            browserSettings: {
-                viewport: config.viewport,
-            },
-        });
-        this.stagehand = new Stagehand({
-            env: "BROWSERBASE",
-            browserbaseSessionID: sess.id,
-            modelName: "claude-3-5-sonnet-latest",
-            modelClientOptions: { apiKey: this.env.ANTHROPIC_API_KEY },
-        });
+        const useLocal = config.engine?.type === "stagehand-local" || config.engine?.type === "playwright";
+        if (useLocal) {
+            // Playwright local: sin Browserbase. Requiere `npx playwright install chromium`
+            // en el runner. Las acciones AI siguen llamando Anthropic, pero centinela
+            // hoy solo usa page.goto/waitForSelector, así que coste extra ≈ $0.
+            this.stagehand = new Stagehand({
+                env: "LOCAL",
+                modelName: "claude-3-5-sonnet-latest",
+                modelClientOptions: { apiKey: this.env.ANTHROPIC_API_KEY },
+                localBrowserLaunchOptions: {
+                    viewport: config.viewport,
+                    headless: true,
+                },
+            });
+        }
+        else {
+            if (!this.bb)
+                throw new Error("BROWSERBASE_API_KEY requerida para engine.type=browserbase");
+            const sess = await this.bb.sessions.create({
+                projectId: this.env.BROWSERBASE_PROJECT_ID,
+                browserSettings: { viewport: config.viewport },
+            });
+            this.stagehand = new Stagehand({
+                env: "BROWSERBASE",
+                browserbaseSessionID: sess.id,
+                modelName: "claude-3-5-sonnet-latest",
+                modelClientOptions: { apiKey: this.env.ANTHROPIC_API_KEY },
+            });
+        }
         await this.stagehand.init();
         return this.stagehand;
     }
